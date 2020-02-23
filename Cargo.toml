@@ -1,7 +1,15 @@
 [package]
 name = "signal-msg"
 version = "0.1.0"
+description = "Handle UNIX process signals with a shared channel (uses simple-signal)"
+readme = "README.md"
+license = "MIT"
 authors = ["Duncan McGreggor <oubiwann@gmail.com>"]
+repository = "https://github.com/oxur/signal-msg"
+documentation = "https://docs.rs/signal-msg/"
+categories = ["development-tools"]
+keywords = ["signal", "signals", "SIGINT", "SIGTERM", "SIGABRT"]
+exclude = ["/.github", "/resources", ".gitignore"]
 edition = "2018"
 
 [dependencies]

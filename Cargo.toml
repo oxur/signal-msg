@@ -8,7 +8,7 @@ authors = ["Duncan McGreggor <oubiwann@gmail.com>"]
 repository = "https://github.com/oxur/signal-msg"
 documentation = "https://docs.rs/signal-msg/"
 categories = ["development-tools"]
-keywords = ["signal", "signals", "SIGINT", "SIGTERM", "SIGABRT"]
+keywords = ["signal", "signals", "unix", "SIGINT", "SIGTERM"]
 exclude = ["/.github", "/resources", ".gitignore"]
 edition = "2018"
 

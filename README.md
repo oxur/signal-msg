@@ -16,6 +16,17 @@ messages. Since passing objects into an anonymous function signal handler can
 get tricky, `signal-msg` offers an alternative approach of listening for
 signals on a receiver.
 
+This library was created for ease of use when setting up examples that needed a
+quick and easy setup for signal handling, providing a message-based solution
+around the [simple-signal](https://github.com/swizard0/rust-simple-signal)
+library. A more robust (if also more verbose) solution is possible when using
+the [signal-hook](https://github.com/vorner/signal-hook) library.
+
+Similar functionality to signal-msg is provided by the
+[signal-notify](https://crates.io/crates/signal-notify) and
+[chan-signal](https://crates.io/crates/chan-signal) libraries (note, though,
+that the latter is deprecated).)
+
 ## Usage
 
 ```rust

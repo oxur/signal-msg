@@ -1,6 +1,6 @@
 [package]
 name = "signal-msg"
-version = "0.1.0"
+version = "0.2.0"
 description = "Handle UNIX process signals with a shared channel (uses simple-signal)"
 readme = "README.md"
 license = "MIT"

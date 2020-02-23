@@ -44,12 +44,19 @@ pub fn from_i32(sig_num: i32) -> Result<Signal, String> {
     }
 }
 
-pub fn handle(tx: mpsc::Sender<i32>) {
-    simple_signal::set_handler(&all(), move |signals| {
-        for sig in signals {
-            tx.send(*sig as i32).unwrap();
-        }
-    });    
+pub trait SignalSender {
+    fn handle(&self);
+}
+
+impl SignalSender for mpsc::Sender<i32> {
+    fn handle(&self) {
+        let s = self.clone();
+        simple_signal::set_handler(&all(), move |signals| {
+            for sig in signals {
+                s.send(*sig as i32).unwrap();
+            }
+        });
+    }
 }
 
 pub trait SignalReceiver {

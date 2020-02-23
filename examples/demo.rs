@@ -1,5 +1,4 @@
-use signal_msg;
-use signal_msg::{SignalReceiver, SignalSender};
+use signal_msg::{self, SignalReceiver, SignalSender};
 
 fn main() {
     let (signal_sender, signal_receiver) = signal_msg::new();

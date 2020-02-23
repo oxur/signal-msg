@@ -25,9 +25,9 @@ use signal_msg::SignalReceiver;
 
 fn main() {
     let (signal_sender, signal_receiver) = mpsc::channel();
-    signal_msg::handle(signal_sender);
+    signal_sender.prepare_signals();
     println!("Waiting for a signal...");
-    let sig = signal_receiver.signal();
+    let sig = signal_receiver.listen();
     println!("Got signal: {:?}", sig.unwrap());
 }
 ```

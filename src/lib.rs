@@ -1,5 +1,5 @@
-use std::sync::mpsc;
 use simple_signal::{self};
+use std::sync::mpsc;
 
 // Copied from https://github.com/swizard0/rust-simple-signal/blob/master/src/lib.rs
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -27,7 +27,7 @@ pub fn all() -> Vec<simple_signal::Signal> {
         simple_signal::Signal::Pipe, // 8
         simple_signal::Signal::Alrm, // 9
         simple_signal::Signal::Term, // 10
-        ]
+    ]
 }
 
 pub fn from_i32(sig_num: i32) -> Result<Signal, String> {
@@ -45,11 +45,11 @@ pub fn from_i32(sig_num: i32) -> Result<Signal, String> {
 }
 
 pub trait SignalSender {
-    fn handle(&self);
+    fn prepare_signals(&self);
 }
 
 impl SignalSender for mpsc::Sender<i32> {
-    fn handle(&self) {
+    fn prepare_signals(&self) {
         let s = self.clone();
         simple_signal::set_handler(&all(), move |signals| {
             for sig in signals {
@@ -60,11 +60,11 @@ impl SignalSender for mpsc::Sender<i32> {
 }
 
 pub trait SignalReceiver {
-    fn signal(&self) -> Result<Signal, String>;
+    fn listen(&self) -> Result<Signal, String>;
 }
 
 impl SignalReceiver for mpsc::Receiver<i32> {
-    fn signal(&self) -> Result<Signal, String> {
+    fn listen(&self) -> Result<Signal, String> {
         from_i32(self.recv().unwrap())
     }
 }

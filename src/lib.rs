@@ -68,3 +68,7 @@ impl SignalReceiver for mpsc::Receiver<i32> {
         from_i32(self.recv().unwrap())
     }
 }
+
+pub fn new() -> (mpsc::Sender<i32>, mpsc::Receiver<i32>) {
+    mpsc::channel()
+}

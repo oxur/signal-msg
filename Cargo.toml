@@ -12,6 +12,9 @@ keywords = ["signal", "signals", "unix", "SIGINT", "SIGTERM"]
 exclude = ["/.github", "/resources", ".gitignore"]
 edition = "2018"
 
+[badges]
+maintenance = { status = "actively-developed" }
+
 [dependencies]
 simple-signal = "1.1.1"
 

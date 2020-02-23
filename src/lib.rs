@@ -51,3 +51,13 @@ pub fn handle(tx: mpsc::Sender<i32>) {
         }
     });    
 }
+
+pub trait SignalReceiver {
+    fn signal(&self) -> Result<Signal, String>;
+}
+
+impl SignalReceiver for mpsc::Receiver<i32> {
+    fn signal(&self) -> Result<Signal, String> {
+        from_i32(self.recv().unwrap())
+    }
+}

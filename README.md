@@ -89,6 +89,22 @@ kill -0 $PID  # existence check only — not delivered to the process
 kill -TERM $PID
 ```
 
+which gives:
+
+```bash
+Got signal: SIGUSR1
+Got signal: SIGUSR2
+Got signal: SIGWINCH
+Got signal: SIGCONT
+Got signal: SIGURG
+Got signal: SIGHUP
+Got signal: SIGPIPE
+Got signal: SIGALRM
+Got signal: SIGTERM
+
+Terminating on SIGTERM.
+```
+
 ## Credits
 
 The project logo is derived from the "signpost" icon in the

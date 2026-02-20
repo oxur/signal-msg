@@ -5,9 +5,9 @@
 [![][tag-badge]][tag]
 [![][docs-badge]][docs]
 
-[![][logo]][logo-large]
-
 *Handle UNIX process signals with a shared channel (uses simple-signal)*
+
+[![][logo]][logo-large]
 
 ## About
 
@@ -36,9 +36,19 @@ fn main() {
     let (signal_sender, signal_receiver) = signal_msg::new();
     signal_sender.prepare_signals();
     println!("Waiting for a signal...");
-    let sig = signal_receiver.listen();
-    println!("Got signal: {:?}", sig.unwrap());
+    match signal_receiver.listen() {
+        Ok(sig) => println!("Got signal: {}", sig),
+        Err(e)  => eprintln!("Error: {}", e),
+    }
 }
+```
+
+## Example
+
+Run the bundled demo, then send it a signal (e.g. Ctrl-C):
+
+```bash
+cargo run --example demo
 ```
 
 ## Credits
@@ -47,14 +57,13 @@ The project logo is derived from the "signpost" icon in the
 [motorway](https://www.flaticon.com/packs/motorway-3) icon set by
 [Freepik](https://www.flaticon.com/authors/freepik).
 
-
 ## License
 
-Copyright © 2020, Oxur Group
+Copyright © 2020-2026, Oxur Group
 
 MIT License
 
-<!-- Named page links below: /-->
+[//]: ---Named-Links---
 
 [logo]: resources/images/logo-250x.png
 [logo-large]: resources/images/logo-1000x.png

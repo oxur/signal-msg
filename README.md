@@ -69,7 +69,9 @@ fn main() {
 }
 ```
 
-## Example
+## Examples
+
+### Single Thread
 
 Run the bundled demo in one terminal:
 
@@ -105,6 +107,8 @@ Got signal: SIGTERM
 Terminating on SIGTERM.
 ```
 
+### Mutliple Threads
+
 A second example demonstrates fan-out to multiple independent subscribers, each
 running in its own thread:
 
@@ -113,7 +117,19 @@ cargo run --example signal-msg-multi
 ```
 
 Send the same signal sequence from a second terminal (substituting
-`signal-msg-multi` for the `pgrep` pattern). Each signal is delivered to both
+`signal-msg-multi` for the `pgrep` pattern):
+
+```bash
+PID=$(pgrep -f signal-msg-multi)
+for sig in USR1 USR2 WINCH CONT URG HUP PIPE ALRM; do
+    kill -$sig $PID
+    sleep 0.3
+done
+kill -0 $PID  # existence check only — not delivered to the process
+kill -TERM $PID
+```
+
+Each signal is delivered to both
 subscribers independently; output ordering between them may vary:
 
 ```bash

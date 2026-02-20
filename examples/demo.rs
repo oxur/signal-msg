@@ -4,6 +4,8 @@ fn main() {
     let (signal_sender, signal_receiver) = signal_msg::new();
     signal_sender.prepare_signals();
     println!("Waiting for a signal...");
-    let sig = signal_receiver.listen();
-    println!("Got signal: {:?}", sig.unwrap());
+    match signal_receiver.listen() {
+        Ok(sig) => println!("Got signal: {}", sig),
+        Err(e)  => eprintln!("Error: {}", e),
+    }
 }

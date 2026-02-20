@@ -6,13 +6,15 @@
 //! thread named `signal-msg` performs all non-trivial work. Multiple
 //! independent subscribers are supported via [`Signals::subscribe`].
 //!
+//! Signal handlers are installed automatically when [`Signals::new`] returns,
+//! so it is impossible to forget to activate them.
+//!
 //! # Example
 //!
 //! ```no_run
 //! use signal_msg::Signals;
 //!
 //! let signals = Signals::new().expect("failed to create signal handler");
-//! signals.prepare();
 //! let receiver = signals.subscribe();
 //! println!("Waiting for a signal...");
 //! match receiver.listen() {
@@ -75,6 +77,21 @@ fn from_signum(n: u8) -> Option<Signal> {
     }
 }
 
+/// Installs `pipe_handler` for one signal number via `sigaction(2)`.
+///
+/// # Safety
+///
+/// `signum` must be a valid, catchable POSIX signal number. `pipe_handler` must
+/// remain a valid function pointer for the lifetime of the process (it is a
+/// `static extern "C" fn`, so this is always true). `pipe_handler` only calls
+/// `write(2)`, which is async-signal-safe per POSIX.2017 §2.4.3.
+unsafe fn install_handler(signum: libc::c_int) {
+    let mut sa: libc::sigaction = std::mem::zeroed();
+    sa.sa_sigaction = pipe_handler as *const () as libc::sighandler_t;
+    sa.sa_flags = libc::SA_RESTART;
+    libc::sigaction(signum, &sa, std::ptr::null_mut());
+}
+
 /// A UNIX signal that can be received through a [`Signals`] channel.
 ///
 /// Signals that cannot be caught (`SIGKILL`), that generate core dumps by
@@ -118,8 +135,9 @@ impl std::fmt::Display for Signal {
 
 /// An error produced by signal channel operations.
 ///
-/// `SignalError` implements `Clone` and `PartialEq`; for the [`OsError`][SignalError::OsError] variant
-/// only the [`io::ErrorKind`][std::io::ErrorKind] is compared and cloned, since
+/// `SignalError` implements `Clone` and `PartialEq`; for the
+/// [`OsError`][SignalError::OsError] variant only the
+/// [`io::ErrorKind`][std::io::ErrorKind] is compared and cloned, since
 /// [`io::Error`][std::io::Error] itself is neither `Clone` nor `PartialEq`.
 #[derive(Debug)]
 pub enum SignalError {
@@ -182,8 +200,6 @@ type Senders = Arc<Mutex<Vec<mpsc::Sender<Signal>>>>;
 struct SignalsInner {
     write_fd: RawFd,
     senders: Senders,
-    /// Set to `true` by the first call to [`Signals::prepare`].
-    prepared: AtomicBool,
 }
 
 impl Drop for SignalsInner {
@@ -198,29 +214,18 @@ impl Drop for SignalsInner {
     }
 }
 
-/// Installs `pipe_handler` for one signal number via `sigaction(2)`.
-///
-/// # Safety
-///
-/// `signum` must be a valid, catchable POSIX signal number. `pipe_handler` must
-/// remain a valid function pointer for the lifetime of the process (it is a
-/// `static extern "C" fn`, so this is always true). `pipe_handler` only calls
-/// `write(2)`, which is async-signal-safe per POSIX.2017 §2.4.3.
-unsafe fn install_handler(signum: libc::c_int) {
-    let mut sa: libc::sigaction = std::mem::zeroed();
-    sa.sa_sigaction = pipe_handler as *const () as libc::sighandler_t;
-    sa.sa_flags = libc::SA_RESTART;
-    libc::sigaction(signum, &sa, std::ptr::null_mut());
-}
-
-/// A handle for registering OS signal handlers and creating signal receivers.
+/// A handle for subscribing to OS signals delivered through a shared channel.
 ///
 /// `Signals` is cheaply cloneable (backed by an [`Arc`]). Only one `Signals`
 /// instance may be active at a time per process; calling [`Signals::new`] while
 /// another instance exists returns [`SignalError::AlreadyInitialized`].
 ///
-/// Dropping the last clone of a `Signals` handle de-registers the OS handlers
-/// and releases all resources including the background thread.
+/// OS-level signal handlers are installed automatically by [`Signals::new`],
+/// so signals are delivered from the moment the value is returned. Call
+/// [`subscribe`][Signals::subscribe] to obtain a [`Receiver`].
+///
+/// Dropping the last clone releases all resources including the background
+/// thread.
 ///
 /// # Example
 ///
@@ -228,7 +233,6 @@ unsafe fn install_handler(signum: libc::c_int) {
 /// use signal_msg::Signals;
 ///
 /// let signals = Signals::new().expect("failed to create signal handler");
-/// signals.prepare();
 /// let receiver = signals.subscribe();
 /// match receiver.listen() {
 ///     Ok(sig) => println!("received: {}", sig),
@@ -239,17 +243,17 @@ unsafe fn install_handler(signum: libc::c_int) {
 pub struct Signals(Arc<SignalsInner>);
 
 impl Signals {
-    /// Creates a new signal channel.
+    /// Creates a new signal channel and installs OS-level signal handlers.
     ///
-    /// Allocates a self-pipe and spawns a background dispatch thread named
-    /// `signal-msg`. Call [`prepare`][Signals::prepare] to register OS-level
-    /// signal handlers, then [`subscribe`][Signals::subscribe] to obtain a
-    /// [`Receiver`].
+    /// Allocates a self-pipe, spawns a background dispatch thread named
+    /// `signal-msg`, and registers handlers for all supported signals. Call
+    /// [`subscribe`][Signals::subscribe] to obtain a [`Receiver`].
     ///
     /// # Examples
     ///
     /// ```no_run
     /// let signals = signal_msg::Signals::new().expect("signal setup failed");
+    /// let receiver = signals.subscribe();
     /// ```
     ///
     /// # Errors
@@ -341,35 +345,15 @@ impl Signals {
                 SignalError::OsError(e)
             })?;
 
-        Ok(Signals(Arc::new(SignalsInner {
-            write_fd,
-            senders,
-            prepared: AtomicBool::new(false),
-        })))
-    }
-
-    /// Registers OS-level handlers for all supported signals.
-    ///
-    /// This method is **idempotent** — subsequent calls after the first are
-    /// no-ops. Signals will not be delivered to [`Receiver`]s until this is
-    /// called.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// let signals = signal_msg::Signals::new().expect("signal setup failed");
-    /// signals.prepare();
-    /// signals.prepare(); // second call is a no-op
-    /// ```
-    pub fn prepare(&self) {
-        if self.0.prepared.swap(true, Ordering::SeqCst) {
-            return; // already prepared
-        }
+        // Install OS-level handlers for all supported signals. This is done
+        // after the thread is running so no signals can be lost.
         for &signum in HANDLED_SIGNALS {
             // SAFETY: `signum` is a valid catchable signal number from
             // `HANDLED_SIGNALS` and `pipe_handler` is async-signal-safe.
             unsafe { install_handler(signum) };
         }
+
+        Ok(Signals(Arc::new(SignalsInner { write_fd, senders })))
     }
 
     /// Returns a new [`Receiver`] that will receive all subsequent signals.
@@ -383,7 +367,6 @@ impl Signals {
     /// use signal_msg::Signals;
     ///
     /// let signals = Signals::new().expect("signal setup failed");
-    /// signals.prepare();
     /// let r1 = signals.subscribe();
     /// let r2 = signals.subscribe();
     /// // r1 and r2 each receive independent copies of every signal.
@@ -414,7 +397,6 @@ impl Receiver {
     /// use signal_msg::Signals;
     ///
     /// let signals = Signals::new().expect("signal setup failed");
-    /// signals.prepare();
     /// let receiver = signals.subscribe();
     /// match receiver.listen() {
     ///     Ok(sig) => println!("received: {}", sig),
@@ -441,7 +423,6 @@ impl Receiver {
     /// use signal_msg::Signals;
     ///
     /// let signals = Signals::new().expect("signal setup failed");
-    /// signals.prepare();
     /// let receiver = signals.subscribe();
     /// match receiver.try_listen() {
     ///     Ok(Some(sig)) => println!("got signal: {}", sig),

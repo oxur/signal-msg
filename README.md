@@ -5,22 +5,22 @@
 [![][tag-badge]][tag]
 [![][docs-badge]][docs]
 
-*Handle UNIX process signals with a shared channel (uses simple-signal)*
+*Handle UNIX process signals with a shared channel*
 
 [![][logo]][logo-large]
 
 ## About
 
-This project aims to make simple signal handling even simpler: just use
-messages. Since passing objects into an anonymous function signal handler can
-get tricky, `signal-msg` offers an alternative approach of listening for
-signals on a receiver.
+This project makes UNIX signal handling simple: just listen for signals on a
+channel. Instead of putting logic inside signal-handler closures (which are
+restricted to async-signal-safe operations and cannot easily share state),
+`signal-msg` delivers signals as messages to one or more [`Receiver`]s.
 
-This library was created for ease of use when setting up examples that needed a
-quick and easy setup for signal handling, providing a message-based solution
-around the [simple-signal](https://github.com/swizard0/rust-simple-signal)
-library. A more robust (if also more verbose) solution is possible when using
-the [signal-hook](https://github.com/vorner/signal-hook) library.
+Internally the library uses the self-pipe trick — the OS-level handler writes
+a single byte into a pipe (the only async-signal-safe work it does), and a
+background thread reads from the pipe and fans the signal out to all
+subscribers. A more feature-rich solution is available via the
+[signal-hook](https://github.com/vorner/signal-hook) library.
 
 Similar functionality to signal-msg is provided by the
 [signal-notify](https://crates.io/crates/signal-notify) and

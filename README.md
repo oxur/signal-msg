@@ -41,7 +41,9 @@ really necessary. The ecosystem has matured beautifully — see the [About](#abo
 better-maintained, more feature-complete alternatives worth exploring. But rather than shelving it,
 it seemed like a much better idea to double down on the learning angle: bring the code up to
 current Rust standards, apply everything learned since 2020, and document the journey version by
-version. Sometimes the best way to appreciate how far you've come is to revisit where you started.
+version.
+
+Sometimes the best way to appreciate how far you've come is to revisit where you started :-)
 
 | Version | Goal | Fixes / Changes | Knowledge Gained |
 | ------- | ---- | --------------- | ---------------- |

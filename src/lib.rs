@@ -16,11 +16,9 @@
 //! use signal_msg::Signals;
 //!
 //! let signals = Signals::new().expect("failed to create signal handler");
-//! let receiver = signals.subscribe();
-//! println!("Waiting for a signal...");
-//! match receiver.listen() {
-//!     Ok(sig) => println!("received: {}", sig),
-//!     Err(e)  => eprintln!("channel error: {}", e),
+//! for sig in signals.subscribe() {
+//!     println!("received: {}", sig);
+//!     if sig.is_terminating() { break; }
 //! }
 //! ```
 
@@ -44,6 +42,11 @@ const HANDLED_SIGNALS: &[libc::c_int] = &[
     libc::SIGPIPE,
     libc::SIGALRM,
     libc::SIGTERM,
+    libc::SIGUSR1,
+    libc::SIGUSR2,
+    libc::SIGWINCH,
+    libc::SIGCONT,
+    libc::SIGURG,
 ];
 
 /// OS-level signal handler. Must only call async-signal-safe functions.
@@ -102,9 +105,47 @@ pub enum Signal {
     Alrm,
     /// `SIGTERM` — polite termination request.
     Term,
+    /// `SIGUSR1` — user-defined signal 1.
+    Usr1,
+    /// `SIGUSR2` — user-defined signal 2.
+    Usr2,
+    /// `SIGWINCH` — terminal window-size change.
+    Winch,
+    /// `SIGCONT` — continue a stopped process.
+    Cont,
+    /// `SIGURG` — urgent data available on a socket.
+    Urg,
 }
 
 impl Signal {
+    /// Returns `true` if this signal's conventional action is to terminate
+    /// the process.
+    ///
+    /// The terminating signals are: [`Int`][Signal::Int], [`Term`][Signal::Term],
+    /// [`Ill`][Signal::Ill], [`Abrt`][Signal::Abrt], and [`Fpe`][Signal::Fpe].
+    ///
+    /// All other signals — [`Hup`][Signal::Hup], [`Pipe`][Signal::Pipe],
+    /// [`Alrm`][Signal::Alrm], [`Usr1`][Signal::Usr1], [`Usr2`][Signal::Usr2],
+    /// [`Winch`][Signal::Winch], [`Cont`][Signal::Cont], [`Urg`][Signal::Urg]
+    /// — are non-terminating and may be handled without exiting.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use signal_msg::Signal;
+    ///
+    /// assert!(Signal::Int.is_terminating());
+    /// assert!(Signal::Term.is_terminating());
+    /// assert!(!Signal::Usr1.is_terminating());
+    /// assert!(!Signal::Winch.is_terminating());
+    /// ```
+    pub fn is_terminating(&self) -> bool {
+        matches!(
+            self,
+            Signal::Int | Signal::Term | Signal::Ill | Signal::Abrt | Signal::Fpe
+        )
+    }
+
     fn from_raw(n: u8) -> Option<Self> {
         match libc::c_int::from(n) {
             libc::SIGHUP => Some(Signal::Hup),
@@ -115,6 +156,11 @@ impl Signal {
             libc::SIGPIPE => Some(Signal::Pipe),
             libc::SIGALRM => Some(Signal::Alrm),
             libc::SIGTERM => Some(Signal::Term),
+            libc::SIGUSR1 => Some(Signal::Usr1),
+            libc::SIGUSR2 => Some(Signal::Usr2),
+            libc::SIGWINCH => Some(Signal::Winch),
+            libc::SIGCONT => Some(Signal::Cont),
+            libc::SIGURG => Some(Signal::Urg),
             _ => None,
         }
     }
@@ -131,6 +177,11 @@ impl std::fmt::Display for Signal {
             Signal::Pipe => "SIGPIPE",
             Signal::Alrm => "SIGALRM",
             Signal::Term => "SIGTERM",
+            Signal::Usr1 => "SIGUSR1",
+            Signal::Usr2 => "SIGUSR2",
+            Signal::Winch => "SIGWINCH",
+            Signal::Cont => "SIGCONT",
+            Signal::Urg => "SIGURG",
         };
         f.write_str(name)
     }
@@ -180,9 +231,7 @@ impl std::fmt::Display for SignalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SignalError::Disconnected => f.write_str("signal channel disconnected"),
-            SignalError::AlreadyInitialized => {
-                f.write_str("a Signals instance is already active")
-            }
+            SignalError::AlreadyInitialized => f.write_str("a Signals instance is already active"),
             SignalError::OsError(e) => write!(f, "OS error during signal channel setup: {e}"),
         }
     }
@@ -236,10 +285,9 @@ impl Drop for SignalsInner {
 /// use signal_msg::Signals;
 ///
 /// let signals = Signals::new().expect("failed to create signal handler");
-/// let receiver = signals.subscribe();
-/// match receiver.listen() {
-///     Ok(sig) => println!("received: {}", sig),
-///     Err(e)  => eprintln!("error: {}", e),
+/// for sig in signals.subscribe() {
+///     println!("received: {}", sig);
+///     if sig.is_terminating() { break; }
 /// }
 /// ```
 #[derive(Clone, Debug)]
@@ -318,12 +366,10 @@ impl Signals {
                 loop {
                     // SAFETY: `read_fd` is a valid open file descriptor owned
                     // exclusively by this thread. `buf` is valid for 64 bytes.
-                    let n = unsafe {
-                        libc::read(read_fd, buf.as_mut_ptr().cast::<libc::c_void>(), 64)
-                    };
+                    let n =
+                        unsafe { libc::read(read_fd, buf.as_mut_ptr().cast::<libc::c_void>(), 64) };
                     if n < 0 {
-                        if std::io::Error::last_os_error().kind()
-                            == std::io::ErrorKind::Interrupted
+                        if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
                         {
                             continue; // EINTR — retry the read
                         }
@@ -386,7 +432,11 @@ impl Signals {
     #[must_use]
     pub fn subscribe(&self) -> Receiver {
         let (tx, rx) = mpsc::channel();
-        self.0.senders.lock().unwrap_or_else(|p| p.into_inner()).push(tx);
+        self.0
+            .senders
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(tx);
         Receiver(rx)
     }
 }
@@ -395,7 +445,8 @@ impl Signals {
 ///
 /// Obtained via [`Signals::subscribe`]. Use [`listen`][Receiver::listen] to
 /// block until a signal arrives, or [`try_listen`][Receiver::try_listen] to
-/// poll without blocking.
+/// poll without blocking. `Receiver` also implements [`Iterator`], yielding
+/// each signal in turn until the backing [`Signals`] handle is dropped.
 #[derive(Debug)]
 pub struct Receiver(mpsc::Receiver<Signal>);
 
@@ -452,5 +503,143 @@ impl Receiver {
             Err(mpsc::TryRecvError::Empty) => Ok(None),
             Err(mpsc::TryRecvError::Disconnected) => Err(SignalError::Disconnected),
         }
+    }
+}
+
+/// Yields each arriving [`Signal`] in turn, blocking between deliveries.
+///
+/// The iterator ends naturally when the backing [`Signals`] handle is dropped.
+/// This enables idiomatic `for` loops and the full iterator combinator toolkit.
+///
+/// # Examples
+///
+/// ```no_run
+/// use signal_msg::Signals;
+///
+/// let signals = Signals::new().expect("signal setup failed");
+/// for sig in signals.subscribe() {
+///     println!("received: {}", sig);
+///     if sig.is_terminating() { break; }
+/// }
+/// ```
+impl Iterator for Receiver {
+    type Item = Signal;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.recv().ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Signal::is_terminating ---
+
+    #[test]
+    fn test_is_terminating_exit_signals() {
+        assert!(Signal::Int.is_terminating());
+        assert!(Signal::Term.is_terminating());
+        assert!(Signal::Ill.is_terminating());
+        assert!(Signal::Abrt.is_terminating());
+        assert!(Signal::Fpe.is_terminating());
+    }
+
+    #[test]
+    fn test_is_terminating_non_exit_signals() {
+        assert!(!Signal::Hup.is_terminating());
+        assert!(!Signal::Pipe.is_terminating());
+        assert!(!Signal::Alrm.is_terminating());
+        assert!(!Signal::Usr1.is_terminating());
+        assert!(!Signal::Usr2.is_terminating());
+        assert!(!Signal::Winch.is_terminating());
+        assert!(!Signal::Cont.is_terminating());
+        assert!(!Signal::Urg.is_terminating());
+    }
+
+    // --- Signal::Display ---
+
+    #[test]
+    fn test_display_new_signals() {
+        assert_eq!(Signal::Usr1.to_string(), "SIGUSR1");
+        assert_eq!(Signal::Usr2.to_string(), "SIGUSR2");
+        assert_eq!(Signal::Winch.to_string(), "SIGWINCH");
+        assert_eq!(Signal::Cont.to_string(), "SIGCONT");
+        assert_eq!(Signal::Urg.to_string(), "SIGURG");
+    }
+
+    #[test]
+    fn test_display_existing_signals() {
+        assert_eq!(Signal::Hup.to_string(), "SIGHUP");
+        assert_eq!(Signal::Int.to_string(), "SIGINT");
+        assert_eq!(Signal::Ill.to_string(), "SIGILL");
+        assert_eq!(Signal::Abrt.to_string(), "SIGABRT");
+        assert_eq!(Signal::Fpe.to_string(), "SIGFPE");
+        assert_eq!(Signal::Pipe.to_string(), "SIGPIPE");
+        assert_eq!(Signal::Alrm.to_string(), "SIGALRM");
+        assert_eq!(Signal::Term.to_string(), "SIGTERM");
+    }
+
+    // --- Signal::from_raw ---
+
+    #[test]
+    fn test_from_raw_new_signals() {
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+        {
+            assert_eq!(Signal::from_raw(libc::SIGUSR1 as u8), Some(Signal::Usr1));
+            assert_eq!(Signal::from_raw(libc::SIGUSR2 as u8), Some(Signal::Usr2));
+            assert_eq!(Signal::from_raw(libc::SIGWINCH as u8), Some(Signal::Winch));
+            assert_eq!(Signal::from_raw(libc::SIGCONT as u8), Some(Signal::Cont));
+            assert_eq!(Signal::from_raw(libc::SIGURG as u8), Some(Signal::Urg));
+        }
+    }
+
+    #[test]
+    fn test_from_raw_unknown_returns_none() {
+        assert_eq!(Signal::from_raw(0), None);
+        assert_eq!(Signal::from_raw(255), None);
+    }
+
+    // --- Iterator for Receiver ---
+
+    #[test]
+    fn test_receiver_iterator_yields_signals() {
+        let (tx, rx) = mpsc::channel();
+        let receiver = Receiver(rx);
+
+        tx.send(Signal::Usr1).unwrap();
+        tx.send(Signal::Winch).unwrap();
+        tx.send(Signal::Int).unwrap();
+        drop(tx);
+
+        let collected: Vec<Signal> = receiver.collect();
+        assert_eq!(collected, vec![Signal::Usr1, Signal::Winch, Signal::Int]);
+    }
+
+    #[test]
+    fn test_receiver_iterator_ends_on_disconnect() {
+        let (tx, rx) = mpsc::channel();
+        let mut receiver = Receiver(rx);
+
+        tx.send(Signal::Cont).unwrap();
+        drop(tx);
+
+        assert_eq!(receiver.next(), Some(Signal::Cont));
+        assert_eq!(receiver.next(), None);
+    }
+
+    #[test]
+    fn test_receiver_iterator_with_take_while() {
+        let (tx, rx) = mpsc::channel();
+        let receiver = Receiver(rx);
+
+        tx.send(Signal::Usr1).unwrap();
+        tx.send(Signal::Winch).unwrap();
+        tx.send(Signal::Int).unwrap(); // terminating — take_while stops before this
+        tx.send(Signal::Usr2).unwrap();
+        drop(tx);
+
+        let non_term: Vec<Signal> = receiver.take_while(|s| !s.is_terminating()).collect();
+        assert_eq!(non_term, vec![Signal::Usr1, Signal::Winch]);
     }
 }

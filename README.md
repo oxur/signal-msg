@@ -51,6 +51,7 @@ version. Sometimes the best way to appreciate how far you've come is to revisit 
 | v0.4.0 | Correctness — the original design had a subtle but serious bug | Dropped `simple-signal`, rewrote with `libc`; self-pipe trick for async-signal-safe delivery; `Arc<Mutex<Vec<Sender>>>` fan-out for multiple subscribers | POSIX async-signal-safety, self-pipe pattern, FFI with `libc`, broadcast channel design |
 | v0.5.0 | Safety and resilience | `// SAFETY:` docs on all `unsafe` blocks, `OsError(std::io::Error)` with `source()`, mutex poison recovery, named background thread, `fcntl` error checking, `try_listen()` | Unsafe code documentation, error chaining, `Mutex` poison semantics, non-blocking channel patterns |
 | v0.6.0 | Compile-time API safety and final polish | Merged `prepare()` into `new()` (typestate pattern), all `unsafe` in private functions, `#![cfg(unix)]` platform gate, EINTR retry in dispatch loop, `Signal::from_raw` in `impl Signal`, corrected MSRV to 1.63 | Typestate pattern, POSIX EINTR semantics, platform gating, MSRV semantics |
+| v0.7.0 | Signal semantics and iterator ergonomics | Added `SIGUSR1`, `SIGUSR2`, `SIGWINCH`, `SIGCONT`, `SIGURG`; `Signal::is_terminating()` to classify exit vs. informational signals; `Iterator` impl on `Receiver`; demo updated to loop using `for sig in receiver` | Signal categorization, `Iterator` for channel receivers, `loop`-as-expression pattern |
 
 ## Usage
 
@@ -59,21 +60,31 @@ use signal_msg::Signals;
 
 fn main() {
     let signals = Signals::new().expect("failed to create signal handler");
-    let receiver = signals.subscribe();
-    println!("Waiting for a signal...");
-    match receiver.listen() {
-        Ok(sig) => println!("Got signal: {}", sig),
-        Err(e)  => eprintln!("Error: {}", e),
+    for sig in signals.subscribe() {
+        println!("Got signal: {}", sig);
+        if sig.is_terminating() { break; }
     }
 }
 ```
 
 ## Example
 
-Run the bundled demo, then send it a signal (e.g. Ctrl-C):
+Run the bundled demo in one terminal:
 
 ```bash
-cargo run --example demo
+cargo run --example signal-msg-demo
+```
+
+then, in a second terminal, walk through all non-terminating signals before finishing with `SIGTERM`:
+
+```bash
+PID=$(pgrep -f signal-msg-demo)
+for sig in USR1 USR2 WINCH CONT URG HUP PIPE ALRM; do
+    kill -$sig $PID
+    sleep 0.3
+done
+kill -0 $PID  # existence check only — not delivered to the process
+kill -TERM $PID
 ```
 
 ## Credits

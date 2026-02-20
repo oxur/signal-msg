@@ -65,8 +65,8 @@ MIT License
 
 [//]: ---Named-Links---
 
-[logo]: resources/images/logo-250x.png
-[logo-large]: resources/images/logo-1000x.png
+[logo]: assets/images/logo/v1-250x.png
+[logo-large]: assets/images/logo/v1.png
 [build]: https://github.com/oxur/signal-msg/actions?query=workflow%3Abuild+
 [build-badge]: https://github.com/oxur/signal-msg/workflows/build/badge.svg
 [crate]: https://crates.io/crates/signal-msg

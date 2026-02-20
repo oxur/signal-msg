@@ -11,10 +11,7 @@ categories = ["development-tools"]
 keywords = ["signal", "signals", "unix", "SIGINT", "SIGTERM"]
 exclude = ["/.github", "/resources", ".gitignore"]
 edition = "2021"
-rust-version = "1.56"
-
-[badges]
-maintenance = { status = "actively-developed" }
+rust-version = "1.63"
 
 [dependencies]
 libc = "0.2"

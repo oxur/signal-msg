@@ -1,3 +1,4 @@
+#![cfg(unix)]
 //! Handle UNIX process signals with a shared channel.
 //!
 //! This crate provides a correct, ergonomic approach to UNIX signal handling.
@@ -63,20 +64,6 @@ extern "C" fn pipe_handler(sig: libc::c_int) {
     }
 }
 
-fn from_signum(n: u8) -> Option<Signal> {
-    match libc::c_int::from(n) {
-        libc::SIGHUP => Some(Signal::Hup),
-        libc::SIGINT => Some(Signal::Int),
-        libc::SIGILL => Some(Signal::Ill),
-        libc::SIGABRT => Some(Signal::Abrt),
-        libc::SIGFPE => Some(Signal::Fpe),
-        libc::SIGPIPE => Some(Signal::Pipe),
-        libc::SIGALRM => Some(Signal::Alrm),
-        libc::SIGTERM => Some(Signal::Term),
-        _ => None,
-    }
-}
-
 /// Installs `pipe_handler` for one signal number via `sigaction(2)`.
 ///
 /// # Safety
@@ -115,6 +102,22 @@ pub enum Signal {
     Alrm,
     /// `SIGTERM` — polite termination request.
     Term,
+}
+
+impl Signal {
+    fn from_raw(n: u8) -> Option<Self> {
+        match libc::c_int::from(n) {
+            libc::SIGHUP => Some(Signal::Hup),
+            libc::SIGINT => Some(Signal::Int),
+            libc::SIGILL => Some(Signal::Ill),
+            libc::SIGABRT => Some(Signal::Abrt),
+            libc::SIGFPE => Some(Signal::Fpe),
+            libc::SIGPIPE => Some(Signal::Pipe),
+            libc::SIGALRM => Some(Signal::Alrm),
+            libc::SIGTERM => Some(Signal::Term),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for Signal {
@@ -318,14 +321,22 @@ impl Signals {
                     let n = unsafe {
                         libc::read(read_fd, buf.as_mut_ptr().cast::<libc::c_void>(), 64)
                     };
-                    if n <= 0 {
-                        break; // EOF (write end closed) or unrecoverable error
+                    if n < 0 {
+                        if std::io::Error::last_os_error().kind()
+                            == std::io::ErrorKind::Interrupted
+                        {
+                            continue; // EINTR — retry the read
+                        }
+                        break; // unrecoverable OS error
+                    }
+                    if n == 0 {
+                        break; // EOF — write end was closed (Signals dropped)
                     }
                     #[allow(clippy::cast_sign_loss)]
                     let received = &buf[..n as usize];
                     let mut locked = thread_senders.lock().unwrap_or_else(|p| p.into_inner());
                     for &byte in received {
-                        if let Some(sig) = from_signum(byte) {
+                        if let Some(sig) = Signal::from_raw(byte) {
                             locked.retain(|s| s.send(sig).is_ok());
                         }
                     }

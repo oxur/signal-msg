@@ -198,6 +198,21 @@ impl Drop for SignalsInner {
     }
 }
 
+/// Installs `pipe_handler` for one signal number via `sigaction(2)`.
+///
+/// # Safety
+///
+/// `signum` must be a valid, catchable POSIX signal number. `pipe_handler` must
+/// remain a valid function pointer for the lifetime of the process (it is a
+/// `static extern "C" fn`, so this is always true). `pipe_handler` only calls
+/// `write(2)`, which is async-signal-safe per POSIX.2017 §2.4.3.
+unsafe fn install_handler(signum: libc::c_int) {
+    let mut sa: libc::sigaction = std::mem::zeroed();
+    sa.sa_sigaction = pipe_handler as *const () as libc::sighandler_t;
+    sa.sa_flags = libc::SA_RESTART;
+    libc::sigaction(signum, &sa, std::ptr::null_mut());
+}
+
 /// A handle for registering OS signal handlers and creating signal receivers.
 ///
 /// `Signals` is cheaply cloneable (backed by an [`Arc`]). Only one `Signals`
@@ -352,16 +367,8 @@ impl Signals {
         }
         for &signum in HANDLED_SIGNALS {
             // SAFETY: `signum` is a valid catchable signal number from
-            // `HANDLED_SIGNALS`. `sa` is zero-initialised then fully populated
-            // before use. The `oldact` pointer is null (previous handler is
-            // intentionally discarded). `pipe_handler` only calls `write(2)`,
-            // which is async-signal-safe per POSIX.
-            unsafe {
-                let mut sa: libc::sigaction = std::mem::zeroed();
-                sa.sa_sigaction = pipe_handler as *const () as libc::sighandler_t;
-                sa.sa_flags = libc::SA_RESTART;
-                libc::sigaction(signum, &sa, std::ptr::null_mut());
-            }
+            // `HANDLED_SIGNALS` and `pipe_handler` is async-signal-safe.
+            unsafe { install_handler(signum) };
         }
     }
 

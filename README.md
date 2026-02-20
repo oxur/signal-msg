@@ -25,7 +25,32 @@ subscribers. A more feature-rich solution is available via the
 Similar functionality to signal-msg is provided by the
 [signal-notify](https://crates.io/crates/signal-notify) and
 [chan-signal](https://crates.io/crates/chan-signal) libraries (note, though,
-that the latter is deprecated).)
+that the latter is deprecated and recommends exploring both `signal-hook` and [crossbeam-channel](https://github.com/crossbeam-rs/crossbeam/tree/master/crossbeam-channel)).
+
+## Learning Experiment
+
+This project was born in early 2020, when Rust was a new and exciting language to explore. Coming
+from backgrounds in Erlang, Clojure, and recently Go — languages where message-passing and channels are
+first-class citizens — the idea of wrapping UNIX signal handling in a familiar channel-based API
+felt like a natural first real-world project. It was a chance to poke at `std::sync::mpsc`, write
+some traits, publish a crate, and generally get a feel for how Rust thinks about ownership,
+concurrency, and interfacing with the OS.
+
+Fast-forward to 2026: coming back to the project made it immediately clear that the library isn't
+really necessary. The ecosystem has matured beautifully — see the [About](#about) section above for
+better-maintained, more feature-complete alternatives worth exploring. But rather than shelving it,
+it seemed like a much better idea to double down on the learning angle: bring the code up to
+current Rust standards, apply everything learned since 2020, and document the journey version by
+version. Sometimes the best way to appreciate how far you've come is to revisit where you started.
+
+| Version | Goal | Fixes / Changes | Knowledge Gained |
+| ------- | ---- | --------------- | ---------------- |
+| v0.1.0 | Wrap signal handling in a channel-based API using `simple-signal` | Initial implementation with `mpsc` channel and `SignalReceiver` trait | `std::sync::mpsc`, traits, crate publishing basics |
+| v0.2.0 | Symmetry and ergonomics | Added `SignalSender` trait, renamed methods, added convenience constructor | Trait design, API ergonomics, Rust naming conventions |
+| v0.3.0 | Fix rough edges found by a fresh audit | Proper `Display` + `Error` impls, replaced panics with `Result`s, cleaner public API surface | Idiomatic error handling, `std::error::Error` trait chain |
+| v0.4.0 | Correctness — the original design had a subtle but serious bug | Dropped `simple-signal`, rewrote with `libc`; self-pipe trick for async-signal-safe delivery; `Arc<Mutex<Vec<Sender>>>` fan-out for multiple subscribers | POSIX async-signal-safety, self-pipe pattern, FFI with `libc`, broadcast channel design |
+| v0.5.0 | Safety and resilience | `// SAFETY:` docs on all `unsafe` blocks, `OsError(std::io::Error)` with `source()`, mutex poison recovery, named background thread, `fcntl` error checking, `try_listen()` | Unsafe code documentation, error chaining, `Mutex` poison semantics, non-blocking channel patterns |
+| v0.6.0 | Compile-time API safety and final polish | Merged `prepare()` into `new()` (typestate pattern), all `unsafe` in private functions, `#![cfg(unix)]` platform gate, EINTR retry in dispatch loop, `Signal::from_raw` in `impl Signal`, corrected MSRV to 1.63 | Typestate pattern, POSIX EINTR semantics, platform gating, MSRV semantics |
 
 ## Usage
 

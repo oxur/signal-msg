@@ -30,13 +30,14 @@ that the latter is deprecated).)
 ## Usage
 
 ```rust
-use signal_msg::{self, SignalReceiver, SignalSender};
+use signal_msg::Signals;
 
 fn main() {
-    let (signal_sender, signal_receiver) = signal_msg::new();
-    signal_sender.prepare_signals();
+    let signals = Signals::new().expect("failed to create signal handler");
+    signals.prepare();
+    let receiver = signals.subscribe();
     println!("Waiting for a signal...");
-    match signal_receiver.listen() {
+    match receiver.listen() {
         Ok(sig) => println!("Got signal: {}", sig),
         Err(e)  => eprintln!("Error: {}", e),
     }

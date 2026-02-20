@@ -5,7 +5,7 @@ fn main() {
     let receiver = signals.subscribe();
     println!("Waiting for a signal...");
     match receiver.listen() {
-        Ok(sig) => println!("Got signal: {}", sig),
-        Err(e) => eprintln!("Error: {}", e),
+        Ok(sig) => println!("\nGot signal: {}", sig),
+        Err(e) => eprintln!("\nError: {}", e),
     }
 }

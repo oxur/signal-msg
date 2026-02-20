@@ -105,6 +105,29 @@ Got signal: SIGTERM
 Terminating on SIGTERM.
 ```
 
+A second example demonstrates fan-out to multiple independent subscribers, each
+running in its own thread:
+
+```bash
+cargo run --example signal-msg-multi
+```
+
+Send the same signal sequence from a second terminal (substituting
+`signal-msg-multi` for the `pgrep` pattern). Each signal is delivered to both
+subscribers independently; output ordering between them may vary:
+
+```bash
+[subscriber-1] Got signal: SIGUSR1
+[subscriber-2] Got signal: SIGUSR1
+[subscriber-1] Got signal: SIGWINCH
+[subscriber-2] Got signal: SIGWINCH
+...
+[subscriber-1] Got signal: SIGTERM
+[subscriber-2] Got signal: SIGTERM
+
+Both subscribers exited.
+```
+
 ## Credits
 
 The project logo is derived from the "signpost" icon in the

@@ -5,7 +5,7 @@
 [![][tag-badge]][tag]
 [![][docs-badge]][docs]
 
-*Handle UNIX process signals with a shared channel*
+*UNIX signal handling as an iterator over a shared channel*
 
 [![][logo]][logo-large]
 
